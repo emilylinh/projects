@@ -1,0 +1,4 @@
+CompareResult
+5
+10
+-10

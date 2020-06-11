@@ -1,0 +1,4 @@
+CompareResult
+F
+F
+T

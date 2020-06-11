@@ -1,0 +1,316 @@
+---
+title: \vspace{3in} "Modeling Real Estate Valuations and Concrete Strength" 
+affiliation: "University of California, Santa Barbara"
+author: "Emily Lu and Jason Edwards"
+date: "May 26th, 2019" 
+output:
+  pdf_document: 
+    latex_engine: xelatex
+---
+\newpage
+
+# Abstract 
+
+This report is split into two components. The first component serves to evaluate the relationship between real estate valuation metrics and real estate prices. In particular, this report investigates how real estate valuations collected from the Sindian District, New Taipei City, Taiwan during the period of June 2012 to May 2013 are affected by 6 variables: the transaction date, the house age, the distance to the nearest Metro station, the number of convenience stores within walking distance, and the latitude & longitude coordinates. The second component of this report investigates how the concrete compressive strength is affected by 8 concrete components: cement, blast furnace slag, fly ash, water, superplasticizer, coarse aggregate, fine aggregate, and age. 
+
+
+\newpage 
+
+# Part I: Real Estate Valuation Data
+
+## Introduction 
+
+The main purpose of this section is to understand what real estate valuation metrics influence price the most and to illustrate what their relationship with price entails. We completed a case study on house prices in the Sindian District in New Taipei City, Taiwan and how metrics such as transaction date, house age, distance to the nearest Metro station, number of convenience stores within walking distance, and the latitude & longitude coordinates affect the price of houses within the district. This was done by building a model with the most significant valuation metrics as predictors for price. We then strived to choose the best metrics as predictors and transformed them in order to achieve the best fit for predicting and estimating price.   
+
+For this data set, our main questions of interests are: 
+\begin{enumerate}
+\item What real estate valuation metrics form the best model to predict and estimate price? 
+\item How does each historical market data affect the real estate valuation? 
+\item How does changing certain valuation metrics affect real estate valuations?  
+\end{enumerate}
+To answer our questions above, we used Multiple Linear Regression and various measures of linearity such as AIC, r-squared, t-tests, multiple scatter plots and residuals vs. fitted plots. Afterwards, we transformed the predictor and response variables using appropriate lambda derivation techniques such as the BoxCox plots and power transformations to ensure we chose the best transformation.  
+
+## Data Description  
+
+The market historical data set of real estate valuation are collected from Sindian District, New Taipei City, Taiwan during the period of June 2012 to May 2013. The original data set is available on the *UC Irvine Machine Learning Repository* and was donated by Dr. I-Cheng Yeh.
+
+This data set serves to model the relationship between the real estate valuations and the 6 market historical data sets. 
+
+**Variable Name**  Description
+-----------------  ---------------------
+**TDate**          Transaction Date (e.g., 2013.250=2013 March, 2013.500=2013 June, etc.)
+**Age**            House Age (unit: year)
+**Metro**          Distance to the Nearest MRT Station (unit: meter)
+**Stores**         Number of Convenience Stores in the Living Circle on Foot (integer)
+**Latitude**       Geographic Coordinate (unit: degree)
+**Longitude**      Geographic Coordinate (unit: degree)
+**Price**          House Price of Unit Area (10000 New Taiwan Dollar/Ping, where
+                   Ping is a local 7 unit, 1 Ping = 3.3 $m^3$)
+-----------------  -----------------------
+
+```{r part 1, echo = FALSE}
+REVals <- read.table("RealEstateValuation.txt")
+```
+
+## Regression Analysis, Results and Interpretation:
+
+Before we dove deep into assessing how each of the predictor variables affect our response variable, the house price, we expected to see varying relationships among the response and each of the predictor variables. For instance, we predicted the house price to have a positive correlation with the transaction date since global real estate prices have been on the rise ever since the end of the Great Recession in June 2009.  We also expected age to have a negative association with price because the Sindian district is an urban district so newer developments tend to be priced with a premium. Additionally, we expected the number of convenience stores within walking distance to have a positive correlation with the house price since people are typically more willing to pay more in exchange for convenience. As for latitude and house price, we expected an insignificant relationship due to the district being surrounded by a river at both latitudinal ends and because of waterfront property typically having much higher valuations.  
+
+
+```{r 1.2a, echo = FALSE, fig.align= 'center'}
+library(car)
+fit <- lm(Price~ TDate + Age + Stores + Latitude, data = REVals)
+avPlots(fit, lwd = 1)
+```
+
+From our exploratory analysis using the Added-Variable plots, we could see that when accounting for the other predictors: Age, Stores, and Latitude, Transaction date does not appear to be significant when included in our model. Age, Stores, and Latitude all appear to be useful.  
+
+### Global F-Test 
+
+The fitted regression line, extracted from the R-code below, is: 
+$$Price = -1.742e^{4} + 3.613\text{TDate} - 3.020e^{-1}\text{Age} + 1.929\text{Stores} + 4.078e^{2}\text{Latitude}.$$
+
+```{r 1.2b, echo = FALSE}
+fit <- lm(Price~ TDate + Age + Stores + Latitude, data = REVals)
+summary(fit)
+```
+
+Since the p-value for the Global F-Test is relatively small, we concluded that at least one of our predictors has a relationship with the price when taking into account the other predictors.  As for marginal p-values, we could see that Age, Stores, and Latitude are significant with respect to their relationship with the price when considering the other predictors.
+\begin{itemize}
+\item If TDate, Stores, and Latitude are held constant, a one year increase in age will result in an estimated average decrease of $-3.020e^{-1}$ house price of unit area.  
+\item If TDate, Age and Latitude are held constant, a one store increase in the number of stores will result in an estimated average increase of 1.929 house price of unit area. 
+\item If TDate, Stores, and Age are held constant, a one-degree increase in latitude will result in an estimated average increase of $4.078e^2$ house price of unit area.
+\end{itemize}
+
+### Model Comparison after the Addition of Metro and Longitude 
+
+```{r 1c, fig.align= 'center'}
+fitMetro <- lm(Price~ TDate + Age + Stores + Latitude + Metro, data = REVals)
+fitLongitude <- lm(Price~ TDate + Age + Stores + Latitude + Longitude, data = REVals)
+fitboth <- lm(Price~ TDate + Age + Stores + Latitude + Metro + Longitude, data = REVals)
+summary(fitboth)
+summary(fitMetro)$r.squared
+summary(fitLongitude)$r.squared
+
+#using AIC forward selection 
+m0<-lm(Price~TDate + Age + Stores + Latitude, data = REVals)
+f = ~ TDate + Age + Stores + Latitude + Metro + Longitude
+step(m0, f, direction = "forward")
+```
+The t-value for Longitude is -0.256. Since the p-value (0.7983) for Longitude is relatively large when Metro is included, we failed to reject the null hypothesis, i.e. longitude does not have a relationship with Price when also accounting for Metro in the model. From this, we concluded that including both Metro and Longitude is not useful in our model. However, since both predictors are significant on their own, we used the fact that the model with Metro included has a higher r-squared value (0.582) than the model with Longitude (0.542) to choose it as the better model. This was also confirmed by the AIC of the model with Metro being lower than the AIC of the model with Longitude when starting with the four original predictors followed by the model with Longitude not having a lower AIC than *none* when Metro is included in the model. This means that not adding any more predictors produces a better AIC than adding Longitude after Metro.
+
+### Model Comparisons between the Addition of Metro and Addition of Stores  
+
+```{r 1d, echo = TRUE}
+fitstores <- lm(Price ~ TDate + Age + Stores + Latitude, data = REVals)
+fitmetro <- lm(Price ~ TDate + Age + Metro + Latitude, data = REVals)
+summary(fitmetro)$r.squared # Model (1)
+summary(fitstores)$r.squared # Model (2)
+par(mfrow=c(2,2))
+plot(fitmetro)
+```
+
+Between the models (1) and (2), we preferred model (2) since the addition of Metro yields a higher R-Squared value, 0.545. This means that 54.5% of the variability is explained by the model compared to the 50.15% of variability that is explained by the model using Stores. We used R-Squared as our deciding metric because (1) and (2) are not submodels of each other and contain the same number of predictors.  
+
+
+### Transforming Price and Metro 
+
+```{r}
+fitlog <- lm(Price ~ TDate + Age + log(Metro) + Latitude, data = REVals)
+summary(fitlog)$r.squared
+summary(fitmetro)$r.squared
+```
+
+As you can see, transforming Metro leads to a significantly better r-squared value, improving the linearity of our model. Next, we transformed the response. However, to determine which transformation should be applied, we used the Box-Cox transformation. 
+
+```{r, fig.align = 'center', fig.width=8, fig.height=4, echo = FALSE}
+boxCox(fitlog)
+```
+```{r, echo = FALSE}
+price.pt <- powerTransform(REVals$Price)
+summary(price.pt)
+```
+
+Since $\lambda = 0.5$ is within the confidence interval provided by Box-Cox and Power Transformation methods, we used a square root transformation.
+
+```{r, echo = FALSE, fig.align='center'}
+fitfinal <- lm(sqrt(Price) ~ TDate + Age + log(Metro) + Latitude, data = REVals)
+REValsTrans<-with(REVals,data.frame(sqrt(Price),log(Metro),Age,Latitude,TDate))
+par(mfrow=c(2,2))
+plot(fitmetro)
+```
+The variable **age**, the house age in years, and the variable **TDate**, the transaction date, are measures of time so a transformation will not be very useful for understanding our model.  We tried a log transformation on metro since it is a measure of distance and cannot be less than or equal to 0. Metro also has a wide range, so a log transformation is likely to be appropriate. After doing a likelihood ratio test on Metro, we could see that the p-value after doing a log transformation is 0.63, which is relatively large compared to any standard significance level, allowing us to confidently transform Metro. 
+
+```{r, echo = FALSE}
+par(mfrow=c(2,2))
+plot(fitfinal)
+```
+
+After transforming both price and metro, we could see significant improvement in linearity since the residuals vs fits plot looks more like a cloud of points with no clear pattern after the transformation.  We could also see an improvement in r-squared (0.699) and constant variance based on a more even spread of points from left to right across the scale-location plot. Before the transformations, there was a skew of points to the right on the scale-location plot. As for normality, the Q-Q plots seem to stay relatively constant before and after the transformations.
+
+## Conclusion 
+
+Starting with the first model using predictors TDate, Age, Stores and Latitude, we noticed that TDate was not as related to price as we had expected. However, after replacing Stores with Metro, TDate showed a significant relationship as we had initially expected. We expected this to be due to a correlation between TDate and Stores, most likely because as time passes (transaction date increases), more stores develop within the Sindian District, making TDate less useful when already considering the number of stores. Another aspect we thought was interesting was the significance of the relationship between price and latitude before and after changes were made to the model. Latitude showed a consistent positive relationship with real estate prices throughout the introduction of new predictors and the transformation of others. This is perhaps explained by how houses with higher latitudes are closer to the city center of New Taipei City and thus, typically closer to where the Yamsui River runs through the Sindian District. Since waterfront properties are typically deemed more valuable, the housing prices were much higher. Finally, the housing prices declines as the distance between the house and the nearest MRT Train Station increases. This gave us insight into the housing location preferences of the citizens living in the Sindian District are since their interest in the proximity of a nearby MRT station is reflected in the housing prices.  
+
+
+\newpage 
+
+# Part II: Concrete Compressive Strength Data Set 
+
+## Introduction  
+
+High Performance Concrete (HPC) is a type of concrete designed to exceed the properties and constructability of conventional concrete. It is highly imperative towards the construction industry and is primarily used in bridges, tall buildings, and tunnels due to its strength, durability, and high elastic modulus. Due to the nature of its usage, HPC must be made with only the highest quality ingredients and carefully optimized mixture designs, thus making it an exceedingly complex material to model the behaviors of its components for strength performance. However, this report aims to utilize Multiple Linear Regression Analyses to model which component(s) of the 8 concrete components are directly correlated to the strength of HPC. Finding which ingredients are most influential towards the strength of HPC will provide great insights to HPC producers and in turn, ensure the safety of all constructions made with HPC. 
+
+For this data set, the two main questions of interest are: 
+\begin{enumerate}
+\item Which concrete components are actively associated with the concrete compressive strength? 
+\item How does removing one or more of the 8 concrete components affect the concrete compressive strength?
+\end{enumerate}
+
+To answer those questions above, we used the following regression analysis methods: \begin{enumerate}
+\item[I.] Forward Selection Algorithm using BIC 
+\begin{itemize}
+\item Diagnostic Checks: 
+\begin{itemize} 
+\item Linear Regression Assumptions (Linearity, Normality, Constant Variance)
+\item Leverage and Cooks' Distance for Influential Observations 
+\end{itemize}
+\end{itemize}
+\item[II.] Confidence Interval for Mean Response 
+\item[III.] Prediction Interval for Individual Response 
+\item[IV.] Backward Elimination Algorithm using BIC 
+\begin{itemize}
+\item Diagnostic Checks: 
+\begin{itemize}
+\item Linear Regression Assumptions (Linearity, Normality, Constant Variance)
+\item Leverage and Cooks' Distance for Influential Observations. 
+\end{itemize}
+\end{itemize}
+\end{enumerate}
+
+## Data Description 
+
+The data set was collected for the paper, *Modeling of Strength of High Performance Concrete Using Artificial Neural Networks*, by Dr. I-Cheng Yeh. This data set is used to model the relationship between the concrete compressive strength and the 8 concrete components.
+
+**Variable Name** |  Description
+------------------|---------------
+**X1**            |  Cement (component 1, unit *kg/*$m^{3}$)
+**X2**            |  Blast Furnace Slag (component 2, unit *kg/*$m^{3}$)
+**X3**            |  Fly Ash (component 3, unit *kg/*$m^{3}$)
+**X4**            |  Water (component 4, unit *kg/*$m^{3}$)
+**X5**            |  Superplasticizer (component 5, unit *kg/*$m^{3}$)
+**X6**            |  Coarse Aggregate (component 6, unit *kg/*$m^{3}$)
+**X7**            |  Fine Aggregate (component 7, unit *kg/*$m^{3}$)
+**X8**            |  Age (Day, 1 ~ 36)
+**Y**             |  Concrete compressive strength (MPa)
+
+```{r part 2, echo = FALSE}
+Concrete <- read.table("Concrete.txt")
+```
+
+## Regression Analysis, Results and Interpretation
+
+Before we began with our regression analysis, we found the Added Variable Plots of the full model, $$Y = \beta_{0} + \beta_{1}\text{X1} + \beta_{2}\text{X2} + \beta_{3}\text{X3} - \beta_{4}\text{X4} + \beta_{5}\text{X5} + \beta_{6}\text{X6} + \beta_{7}\text{X7} + \beta_{8}\text{X8}$$ to assess the relationship between Y and $X_{i}$ after removing the effects of the other predictors (concrete components).  
+```{r fig.align= 'center', echo = FALSE}
+mod.full <- lm(Y ~ ., data = Concrete)
+par(mfrow = c(2, 4))
+avPlots(mod.full, id = list(n = 2, cex = 0.8))
+```
+Looking at the AV-Plots, we could see that some predictors seem to have a significant relationship more than others. This is useful in seeing which concrete components are more directly associated with the concrete compressive strength; however, it doesn't tell us which combination of the concrete components would give us the best concrete compressive strength result. Thus to do so, we applied the Forward Model Selection using the Bayesian Information Criterion below and performed diagnostic check.  
+
+### Forward Selection Using BIC 
+
+```{r, 2.a, echo = FALSE}
+mod.0 <- lm(Y ~ 1, data = Concrete)
+
+step(mod.0, scope = list(lower = mod.0, upper = mod.full), direction = "forward", 
+     k = log(length(Concrete$X1)), trace = 0)
+```
+The results gave us a combination of $$\text{Y} = 29.03 + 0.105\text{X1} + 0.239\text{X5} + 0.113\text{X8} + 0.086\text{X2} - 0.218\text{X4} + 0.069\text{X3}.$$ However, before we could assume these predictors will produce the best combination, we must perform diagnostic checks for influential cases and linear regression assumptions (linearity, independence, normality, and constant variance). 
+
+#### Diagnostic Checks for Linear Regression Assumptions
+
+To perform diagnostic checks for linear regression assumptions, we plotted $\text{Y} \sim \text{X1} + \text{X5} + \text{X8} + \text{X2} + \text{X4} + \text{X3}$ using the Residual vs. Fitted plot to check the linear relationship assumption, Normal Q-Q plot to check if the residuals are normally distributed, Scale-Location plot to check for constant variance of residuals, and Residuals vs. Leverage & Cook's distance plots to identify influential cases.       
+```{r, fig.align= 'center', fig.width=7.5, fig.height=5.5, echo = FALSE}
+forward.fit <- lm(Y ~ X1 + X5 + X8 + X2 + X4 + X3, data = Concrete)
+par(mfrow = c(2, 3), pin = c(1.5, 1.5))
+plot(forward.fit, which = c(1:5))
+```
+Our diagnostic plots show that our fitted model satisfies all the model assumptions of linearity, normality and constant variance. According to the Cook's Distance plot, the most influential points are 611, 57, and 43. To explain why they're influential, we calculated the leverage and standardized residuals of each one. 
+
+#### Influential Observations using Leverage and Cooks’ Distance
+```{r, echo = FALSE}
+hii <- hatvalues(forward.fit)
+ei <- forward.fit$residuals
+sigma.hat <- sigmaHat(forward.fit)
+p <- 7
+
+ri <- ei/(sigma.hat*sqrt(1-hii))
+Di <- (1/(p))*ri^2*(hii/(1-hii))
+ti <- ri*sqrt((1030-p-1)/(1030-p-ri^2))
+df<-data.frame(ei, hii, ri, Di, ti)
+subset(df, Di>0.03)
+```
+In general, we compared the leverage values, hii to $\frac{14}{1030}$ to identify high leverage points. Based on the leverage and standardized residual calculations of each observations above, we could see clearly why those data points are influential. 
+
+Removing influential points could potentially improve our model fit and linear regression assumptions. Thus, we tested below to see if whether removing these influential data points will make a difference or not. 
+
+**Summary of the Original Forward Fitted Model**
+```{r, echo = FALSE}
+summary(forward.fit)
+```
+**Summary of New Model without the Influential Points**
+```{r, echo = FALSE}
+concrete.rmv <- Concrete[-c(43, 611, 57),]
+newforward <- lm(Y ~ X1 + X5 + X8 + X2 + X4 + X3, data = concrete.rmv)
+summary(newforward)
+```
+Comparing the two summaries above, there is not a signficant enough difference to remove the influential points. Therefore, we kept the original model to move forward. 
+
+### Confidence Interval for Mean Response
+
+We predicted each concrete components to be: 
+```{r, echo = FALSE}
+new <- data.frame(X1 = 380, X5 = 4, X8 = 28, X2 = 95, X4 = 2, X3 = 0)
+print(new)
+```
+```{r 2a 95% CI, echo = TRUE}
+predict(forward.fit, newdata = new, interval = "confidence", level = 0.95, 
+        type = "response")[1,]
+```
+From our confidence interval calculation, the estimated average concrete compressive strength is 81.00684. Additionally, we are 95% confident that the actual average of the concrete compressive strength is in between the interval of (73.29586, 88.71783). 
+
+### Prediction Interval for Response
+
+Using the same predictor values as for our Confidence Interval, we computed the 95% predictor for the individual response.     
+```{r 2a 95% PI, echo = TRUE}
+predict(forward.fit, newdata = new, interval = "prediction", level = 0.95,
+        type = "response")[1,]
+```
+From the results above, it appears that the predicted value for the concrete compressive strength given the values of the selected concrete components is 81.00684. We are 95% confident that the concrete compressive strength is in between the interval of (59.17292, 102.84077). 
+
+### Backward Elimination Using BIC 
+
+```{r 2.b, echo = TRUE}
+step(mod.full, scope = list(lower = mod.0, upper = mod.full), direction = 'backward', 
+     k = log(length(Concrete$X1)), trace = 0)
+```
+The backward elimination algorithm gave us the same combination of predictor variables; thus, it appears that X1, X2, X3, X4, X5, and X8 are the active predictor variables in determining the response variable.    
+
+#### Diagnostic Checks 
+
+Since the backward elimination algorithm using BIC gave us the same model as the forward selection algorithm, the linear regression assumptions, influential points, and model quality will also be the same.     
+  
+## Conclusion
+
+Through our Regression Analysis process, we found that only 5 out of the 8 concrete components are strongly associated with the concrete compressive strength. Among these 5 concrete components, each of them, with the exception of the water (X4), have a positive linear relationship with the compressive strength of concrete. Water has a negative relationship with the compressive strength of concrete, which we did not find surprising. Interestingly, we found the age (X3) of the concrete to have a greater linear relationship with the concrete compressive strength than the concrete component (X1) has with the concrete compressive strength. 
+
+Although our findings strongly lean towards 5 out of the 8 concrete components being actively associated with the concrete compressive strength, we acknowledge that it may still lack reliability. Since we are not experts in the production of concrete, we may have left out possible interaction terms between the concrete components. For instance, the Age component (X8) may have been inversely related the Water content of the concrete (X4) due to evaporation over time. If that were the case, then our fitted model obtained from the forward & backward selections using BIC would not be the best model selection. However, disregarding the potential of a non-parallel model, we found our model to be best in displaying the linear relationship between the response and predictor variables since it satisfied all model assumptions.    
+
+\newpage
+
+# References 
+
+Kosmatka, S. H.; Kerkhoff, B.; and Panarese, W. C., *Design and Control of Concrete Mixtures*, 14th edition, Portland Cement Association, Skokie, IL, 2002, pp. 299-300.
+
+

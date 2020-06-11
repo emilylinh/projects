@@ -1,0 +1,738 @@
+---
+spacing: single 
+fontsize: 11pt 
+geometry: margin=1in 
+output:
+  pdf_document:  
+    number_sections: True
+header-includes:
+    - \usepackage{caption}
+---
+\newgeometry{margin=1.5in}
+\begin{titlepage}
+\newcommand{\HRule}{\rule{\linewidth}{0.5mm}} 
+\center
+\textsc{\Large PSTAT 174/274}\\[0.5cm]
+\textsc{\large FINAL PROJECT}\\[0.5cm] 
+\vspace{2cm}
+\HRule \\[0.4cm]
+{\Large\bfseries Time Series Analysis of Credit Suisse Liquid Alternative Beta Monthly Index}\\[0.4cm] 
+\HRule \\[1.5cm]
+\vspace{2cm}
+\begin{minipage}{0.4\textwidth}
+\begin{flushleft} \large
+\emph{Authors:}\\
+Emily \textsc{Lu}\\
+Enbo \textsc{Zhou}\\
+Vanessa \textsc{Ho}\\
+Xingyu \textsc{Chen}
+\end{flushleft}
+\end{minipage}
+~
+\begin{minipage}{0.4\textwidth}
+\begin{flushright} \large
+\emph{Supervisor:} \\
+Professor Giri \textsc{Gopalan} % Supervisor's Name
+\end{flushright}
+\end{minipage}\\[1.5cm]
+\vspace{4cm}
+{\large December 6th, 2019}\\[0.5cm]
+
+{\large University of California, Santa Barbara}
+
+\vfill 
+
+\end{titlepage}
+\restoregeometry
+
+\newpage 
+```{r setup, include=FALSE}
+library(tinytex)
+library(pander)
+library(readxl)
+library(knitr)
+options(tinytex.verbose = TRUE)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+\section*{Abstract}
+
+Many data in finance are time series, for example stock price, fund price and etc. These financial asset prices are very complicated and subject to many factors. In this project, we exploit the analytical tools from the course: Time Series Analysis, to analyze real-world financial data. We picked Credit Suisse Liquid Alternative Beta Index’s monthly net asset values for example. We did some exploratory analysis and data transformation at first. Afterwards, we completed a time domain analysis SARIMA model to fit our data and make predictions. We also completed a frequency analysis to investigate the cycle characteristics of the time series. Finally, we completed an attempt of the GARCH model to fit the data. The time series analyses reveal some essential characteristics of the hedge fund index and make a decent prediction. To get a better performance, we may use daily data or use other models, like GARCH and VAR, in the future.
+
+\thispagestyle{empty}
+
+\newpage
+\tableofcontents
+\thispagestyle{empty}
+\newpage
+\clearpage
+\pagenumbering{arabic}
+
+\section{Introduction} 
+
+The objective of this project is demonstrate the application of Time Series Analysis towards quantitative finance. In particular, our goal is to identify trends, seasonal variations and correlation using time series analyses, and utimately generate investment signals or filters based on inference or predictions. To do so, our approach will be to forecast and predict future values, simulate financial time series, and make relationship inferences. We aim to generate a model for real world application, especially to help predict the expectancy of various investment methods for fairly new investors in the industry. The data we will be using to do our time series analyses is Credit Suisse Liquid Alternative Beta Index's monthly net asset values from January 1998 to December 2019. 
+
+
+
+\section{Data Description}  
+
+Credit Suisse' Liquid Alternative Beta Index ("LAB") is an index that reflects the returns of the individual LAB strategy indices - Long/Short, Event Driven, Global Strategies, Merger Arbitrage and Managed Futures – scaled accordingly to their respective strategy weights in the Credit Suisse Hedge Fund Index. For our purpose, we will be analyzing the monthly net asset values of Credit Suisse's Liquid Alternative Beta Index. To gather our data, we registered for free on Credit Suisse Hedge Fund Index's official website and downloaded a CSV file of the Liquid Alternative Beta monthly index values. 
+
+
+\begingroup\footnotesize
+
+**Subindex of LAB**                   **Index Description** 
+---------------------------------- ---------------------
+**Event Driven Liquid Index**         Reflects the returns of hedge funds represented 
+                                      by the EventDriven sector of Credit Suisse 
+                                      Hedge Fund Index on liquid securities 
+**Global Strategies Liquid Index**    Reflects the return of all hedge fund 
+                                      strategies on liquid securities not defined 
+                                      as Long/Short or Event Driven within the 
+                                      Credit Suisse Hedge Fund Index
+**Managed Futures Liquid Index**      Reflects the Managed Futures strategy 
+                                      by using a pre-defined quantitative method 
+                                      to invest in equities, fixed income, commodities, 
+                                      currencies, etc... 
+**Merger Arbitrage Liquid Index**     Reflects the Merger Arbitrage strategy 
+                                      by using a pre-defined quantitative method 
+                                      to invest in diversified and 
+                                      broadly representative set of announced merger deals.
+-----------------  -----------------------
+
+\endgroup 
+
+\subsection{Data Exploration} 
+
+With a total of 265 observations, our original dataset contains 2 variables: date on the monthly bases from January 1998 to December 2019 and monthly Liquid Alternative Beta Index from Credit Suisse. We decided to split the dataset into training and testing dataset and to cut the last 12 observations as our testing data for later comparison with our forecasted values. Thus, there are 253 training data and 12 testing data.
+For our preliminary data exploration, we transformed the Liquid Alternative Beta Index data into time series format and plotted it below with all the 265 observations.
+
+```{r, echo = FALSE, fig.align = 'center', fig.width=8, fig.height= 4}
+data = read.csv("index.csv",header=T)
+index1 = ts(data[,2], start=1998, f=12)
+index = ts(data[,2])
+ts.plot(index1, ylab="Liquid Alternative Beta Index")
+title(main = "Liquid Alternative Beta Index Price Series", sub = '(Figure 2.1) Long Liquid Alternative Beta Index from Jan. 1998 to Dec. 2019', font.sub = 2, cex.sub = 0.7)
+```
+
+From Figure 2.1, we can see an upward trend over time, indicating the increase in index values. Besides, from the ACF Plot below, we can also tell that the data is not stationary, since the decay of ACF Plot is very slow.
+
+```{r, fig.align = 'center', fig.width=8, fig.height= 4}
+acf(index,lag.max=100,na.action = na.pass, main="ACF of Raw Data")
+title(sub = '(Figure 2.2) ACF Plot', font.sub = 2, cex.sub = 0.7, line=-1,outer=TRUE)
+```
+
+From Figure 2.1 and Figure 2.2, the seasonality is not captured clearly, so we drew a seasonal plot as shown in Figure 2.3 below.
+
+```{r, echo = FALSE, fig.align = 'center', fig.width=8, fig.height= 4}
+# Seasonal Plot and Decomposition plot
+library(forecast)
+seasonplot(index1,12,col=rainbow(3),year.labels=FALSE, main="Seasonal Plot")
+title(sub = '(Figure 2.3) Seasonal Plot', font.sub = 2, cex.sub = 0.7)
+```
+
+From Figure 2.3, the seasonality is not very obvious, so we need to build a more accurate plot to claim the existence of seasonality and trend for the data. Therefore, we will make a decomposition model in the next section.
+
+\subsection{Decomposition} 
+The decomposed model is expressed as $Y_t = m_t + s_t  + S_t$ , where $m_t$ is the trend component, $s_t$ is the seasonal component, and $S_t$ is the stationary process. 
+
+```{r, echo = FALSE, fig.align = 'center', fig.width=8, fig.height= 4}
+decom <- decompose(ts(data[,2],start=1998,f=12),type=c("additive"))
+plot(decom, xlab="Time in years")
+title(sub = '(Figure 2.4) Decomposition Plot', font.sub = 2, cex.sub = 0.7)
+nlength=length(index)-12
+Transindex=index[1:nlength]
+Transindex1=index1[1:nlength]
+```
+From this particular plot, we can observe that there is a clear existence of seasonality with an upward trend. However, the data does not appear to be stationary. With the data being non-stationary, it is difficult to model because the estimate of the mean and some variance would be constantly changing. Thus, before we perform the model building section, as well as data selection, we need to transform and difference the data to make the data stationary.
+
+\section{Data Transformation} 
+
+To make our data stationary, we first transformed the data to stabilize variance, and then we used differencing method to remove seasonality and trend of the data.
+
+\subsection{Box-Cox Transformation}
+
+We used the Box-Cox transformation, an exponent, $\lambda\in(-5,5)$ to stabilize the variance of data and convert the data to a normally distributed one. By applying Box-Cox, we are able to assume normality and perform more tests. To find $\lambda$, we graphed a Box-Cox plot below. 
+
+```{r, echo = FALSE, message=FALSE, results='hide', warnings = FALSE, error=FALSE}
+library(MASS)
+length(Transindex)
+bxTransform <- boxcox(Transindex~as.numeric(1:length(Transindex)))
+lambda = bxTransform$x[which(bxTransform$y == max(bxTransform$y))]
+title(sub = '(Figure 3.1.1) Box-Cox Plot', font.sub = 2, cex.sub = 0.7)
+```
+
+As shown in the plot above, there is a 95% confidence interval for the parameter, as seen by the two dashed vertical lines on each end. We observed that the confidence interval does not contain 0, therefore we could use the best $\lambda$ ($\lambda=1.393939$) to do the transformation $W_t = (Y_t\lambda -1)/\lambda$ to stabilize variance. 
+
+```{r, echo = FALSE}
+par(mfrow=c(1,2))
+trans_index=(Transindex^lambda-1)/lambda
+trans_index1=(Transindex1^lambda-1)/lambda
+ts.plot(trans_index,ylab="transformed data")
+acf(trans_index,lag.max=100,na.action = na.pass,main='')
+```
+
+After transforming our data and plotted the ACF plot, our resulting graph above still indicates that our data is non-stationary. Thus, we then choose to perform the differencing method to stablize our mean, which in turn de-seasonalize and detrend the data. 
+
+\subsection{Remove Seasonality and Trend}
+
+We used the differencing method to remove seasonality and trend. After having observed the seasonality to be 12 months, we decided to start off by differencing data at lag 12 to remove seasonality. We applied the lag $d$ difference as:
+$$\nabla_{12}W_t = W_t - W_{t-12}$$ and plotted the deseasonalized data we obtained below.  
+
+```{r, echo = FALSE}
+# remove Seasonality
+par(mfrow = c(1,3), cex.lab = 0.75, cex.main = 0.75)
+diffindex = diff(trans_index, 12)
+ts.plot(diffindex,main = "De-seasonalized Time Series",ylab=expression(nabla^{12}~W[t]))
+abline(lm(diffindex~as.numeric (1:length(diffindex))))
+
+acf(diffindex,lag.max=100,main="ACF for De-seasonalized data",na.action = na.pass)
+pacf(diffindex,lag.max=100,na.action=na.pass,main="")
+title(main="PACF for De-seasonalized data", line=-1,outer=TRUE)
+```
+
+Then, we need to remove the trend based on the de-seasonalized data we obtained. To do so, we difference the deseasonalized data at lag 1 and plotted the new data below.
+
+```{r, message = FALSE, fig.align = 'center', fig.width=8, fig.height= 4}
+# remove Seasonality and Trend
+diffindex_s<-diff(diffindex, lag=1)
+ts.plot(diffindex_s,main = "Deseasonalized/Detrended Time Series",
+        ylab = expression(nabla~nabla^{12}~W[t]))
+abline(lm(diffindex_s~as.numeric(1:length(diffindex_s))))
+```
+We obtained a variance of 112090.9. After removing the trend component, the trend line appears to be a horizontal line. If we difference it once more, the variance will go up to 202131.2, which indicates an over differencing. Therefore, we concluded that we would only need to difference the data at lag 12 in order to remove seasonality and then difference at lag 1 to remove trend. Our new model is now $$X_t = \nabla\nabla_{12}W_t.$$
+To verify whether $X_t$ is stationary or not, we used the Augmented Dickey-Fuller Test with the following hypotheses: $$\text{H}_0:X_t \text{ is non-stationary VS. }\text{H}_a:X_t \text{ is stationary.}$$
+
+According to the test result, we obtained a p-value of 0.01. Since our p-value is less than 0.05, we reject the null hypothesis and conclude that $X_t$ is stationary at 95% confidence level. Now, we can proceed with the model building and selection based on the stationary data.
+
+\section{Model Identification and Estimation}
+We fit our data into a SARIMA model since our data shows seasonality. The SARIMA model which accounts for seasonal and non-seasonal behavior is as below:
+$$SARIMA(p,d,q)\times(P,D,Q)_s,$$
+where $p$ is the order of non-seasonal AR process, $d$ is the order of non-seasonal differencing, $q$ is the order of non-seasonal MA process, $P$ is the order of seasonal AR process, $D$ is the order of seasonal differencing, $Q$ is the order of seasonal MA process, $s$ is the seasonality period. Based on our monthly index data, we found that the seasonality period is 12, i.e. $s = 12$. First, we difference the transformed data at lag 12 to remove seasonality, then difference at lag 1 to remove trend and we found our deseasonality and detrend data to be a stationary data, so for our data, $D = 1$ and $d = 1$. Next, we need to find non-seasonal order $p$, $q$ and seasonal order $P$, $Q$.
+
+\subsection{Preliminary Model Identification}
+To identify the seasonal order $P$ and $Q$, we checked the ACF and PACF values of the deseasonality and detrend time series, $\nabla\nabla_{12}W_t$, at seasonal lags, i.e. lag 12, 24, 36, 48, etc. Then we plotted the ACF and PACF plot below to find the seasonal orders. 
+
+```{r}
+par(mfrow = c(1,2))
+acf(diffindex_s,lag.max=100,main="ACF for Deseasonalized/Detrended data",na.action = na.pass)
+pacf(diffindex_s,lag.max=100,na.action=na.pass,main="")
+title(main="PACF for Deseasonalized/Detrended data", line=-1,outer=TRUE)
+```
+
+As we could see from the figure above, the ACF cuts off at lag 12 ($Q = 1$), the PACF cuts off at lag 36 ($P = 3$). Thus, we conclude that $Q = 0, 1$ and $P = 0, 1, 2, 3$.
+
+Now, to identify the non-seasonal order p and q, we used the first 11 lags of the ACF and PACF plots. 
+
+```{r}
+# Find P, Q, P=3, Q=1
+par(mfrow=c(1,2), cex.main = 0.75)
+acf(diffindex_s,lag.max=60,na.action = na.pass,main="")
+pacf(diffindex_s,lag.max=60,na.action=na.pass,main="")
+```
+
+As seen in the figure above, the ACF cuts off at lag 0 ($q = 4$) and PACF cuts off at lag 0 ($p = 3$), indicating ARMA (0,0) process. Using AIC and BIC criterion, all combinations of the non-seasonal orders and seasonal orders were applied to select the best model.
+
+\section{Model Selection}
+
+We used the information criterions such as AIC and BIC to select the best model. The model with relatively small AIC and BIC values will be chosen. For each $P$ and $Q$’s combination, we iterated through a loop of possible $p$ and $q$ values. The minimum AIC and BIC gave us a result when $P = 1$, $D = 1$, $Q = 1$, $p = 0$, $d = 1$, $q = 0$. The second minimum AIC and BIC gave us a result when $P = 0$, $D = 1$, $Q = 1$, $p = 0$, $d =1$, $q = 0$. The third minimum AIC and BIC values gave us a result when $P = 2$, $D = 1$, $Q = 1$, $p = 0$, $d =1$, and $q = 0$. The fourth minimum AIC and BIC values gave us the result $P = 3$, $D = 1$, $Q = 1$, $p = 0$, $d =1$, $q = 0$. Therefore, we obtained four possible models based on our results.
+
+We then fitted the first four possible models,
+$$ SARIMA(0,1,0)\times (1,1,1)_{12}$$ 
+
+$$SARIMA(0,1,0)\times (0,1,1)_{12}$$ 
+
+$$SARIMA(0,1,0)\times (2,1,1)_{12}$$
+
+$$SARIMA(0,1,0)\times (3,1,1)_{12}.$$ 
+
+\subsection{Model Estimation}
+For the four models we selected above, we fit and estimate the coefficients based on the MLE method. The results for all three models are showed in Table 4.2.
+
+Denote $X_t$ as the transformed, de-trended and de-seasonalized data, $X_t = (Y_t1.3939 - 1)/1.3939$, where $Y_t$ is our original index data.
+Model 1: $SARIMA(0,1,0)(0,1,1)_{12}$
+$$X_t = (1 – B^{12}) Z_t\text{, where }Z_t ~ N(0, 52886);$$
+```{r}
+# Fit and Estimation based on MLE method
+# MODEL 1 : p =0 and q = 0, P=0, Q=1
+fit1 <- arima(trans_index,order=c(0,1,0),
+              seasonal= list(order=c(0,1,1),period=12),method="ML" )
+```
+
+Model 2: $SARIMA(0,1,0)(1,1,1)_{12}$
+$$(1 + 0.1042B) X_t = (1 – 0.9994B^{12}) Z_t,\text{ where }Z_t ~ N (0,51911);$$
+```{r}
+# Fit and Estimation based on MLE method
+# MODEL 2 : p =0 and q = 0, P=1, Q=1
+fit2 <- arima(trans_index,order=c(0,1,0),
+              seasonal= list(order=c(1,1,1),period=12),method="ML" )
+```
+
+Model3: $SARIMA(0,1,0)(2,1,1)_{12}$
+$$(1 + 0.1374B + 0.0797B^2) X_t = (1 – 0.9262B^{12}) Z_t,\text{ where }Z_t ~ N(0, 54183);$$
+```{r}
+# Fit and Estimation based on MLE method
+# MODEL 3 : p =0 and q = 0, P=2, Q=1
+fit3 <- arima(trans_index,order=c(0,1,0),
+              seasonal= list(order=c(2,1,1),period=12),method="ML" )
+```
+
+Model 4: $SARIMA(0,1,0)(3,1,1)_{12}$
+$$(1 + 0.1214B + 0.0634B^2 – 0.0301B^3) X_t = (1 – 0.9516B^{12}) Z_t,\text{ where }Z_t ~ N (0, 53536);$$
+```{r}
+# Fit and Estimation based on MLE method
+# MODEL 4 : p =0 and q = 0, P=3, Q=1
+fit4 <- arima(trans_index,order=c(0,1,0),
+              seasonal= list(order=c(3,1,1),period=12),method="ML" )
+```
+
+\section{Diagnostics}
+
+Now, we will validate the assumptions of the four models, which include normality, independence and constant variance of errors.
+
+\subsection{Normality}
+We used Q-Q plots to check whether residuals of our models are normally distributed as shown in the figure below. In the Q-Q plots, residuals of all models do not appear to be normally distributed.
+
+```{r}
+# Check the normality of the residuals for both models
+par(mfrow=c(2,2))
+qqnorm(residuals(fit1),main="Normal QQ plot for fit1")
+qqline(residuals(fit1),col="red")
+qqnorm(residuals(fit2),main="Normal QQ plot for fit2")
+qqline(residuals(fit2),col="red")
+qqnorm(residuals(fit3),main="Normal QQ plot for fit3")
+qqline(residuals(fit3),col="red")
+qqnorm(residuals(fit4),main="Normal QQ plot for fit4")
+qqline(residuals(fit4),col="red")
+```
+
+We also performed the Shapiro-Wilk Test at $\alpha = 0.05$ to further test the normality assumption.
+$$\text{H}_0:\text{ residuals are normally distributed}\\ \text{vs.}\\
+\text{H}_a:\text{ residuals are not normally distributed}$$
+
+\captionsetup[table]{labelformat=empty}
+The results are shown in Table 5.1:
+```{r}
+wstat <- c(0.92342, 0.92892, 0.93052, 092973)
+pval <- c('4.122e-10', '1.21e-09', '1.673e-09', '1.425e-09')
+
+table <- data.frame("W Stat." = wstat, "P Value" = pval)
+rownames(table) <- c("Model 1", "Model 2", "Model 3", "Model 4")
+kable(table, col.names = c('W Stat', 'p-value'), caption = "(Table 5.1) Shapiro-Wilk Test")
+```
+
+According to Table 5.1, all p-values are smaller than $\alpha = 0.05$, therefore we reject the null hypothesis that the residuals are normal. These results might have occurred due to the hidden components within our data that we  are unable to detect.
+
+\subsection{Independence (Serial Correlation) Checking}
+Next, we performed the Ljung-Box Test and the Box-Pierce Test at $\alpha = 0.05$ to check whether the residuals in our model are serial uncorrelated with their own lagged values. The results are presented in Table 5.2:
+
+```{r}
+lb <- c(0.3745,0.4293,0.4939,0.5120)
+bp <- c(0.3773,0.4320,0.4965,0.5145)
+
+table <- data.frame("x" = lb, "y" = bp)
+rownames(table) <- c("Model 1", "Model 2", "Model 3", "Model 4")
+kable(table, col.names = c('Ljung-Box', 'Box-Pierce'), caption = "(Table 5.2) Ljung-Box and Box-Pierce Tests Results")
+```
+
+The results in Table 5.2 shows that all p-values are larger than $\alpha = 0.05$, hence we fail to reject the null hypothesis and concluded that the residuals are serially uncorrelated.
+
+\subsection{Constant Variance Checking}
+
+To check the assumption of homoskedasticity, we use the ACF and PACF plots of the squared residuals in our models. If the ACF and PACF values lie within 95% of the White Noise limit (blue dashed lines), then we can conclude that our model fitting has constant variance.
+
+As seen from the figures below, the ACF and PACF plots of squared residuals in these four models do lie within the 95% of the White Noise Limits (blue dashed lines). Therefore, our models have constant variance.
+
+```{r, message = FALSE, results = FALSE}
+# Heteroscedasticity Checking
+par(mfrow=c(2,4))
+library(astsa)
+acf2(residuals(fit1)^2,main = "ACF and PACF of fit1^2")
+acf2(residuals(fit2)^2,main = "ACF and PACF of fit2^2")
+acf2(residuals(fit3)^2,main = "ACF and PACF of fit3^2")
+acf2(residuals(fit4)^2,main = "ACF and PACF of fit4^2")
+```
+
+Finally, we chose model 1 and the final model is:
+$$SARIMA(0,1,0)(0,1,1)_{12} \\ X_t = (1 – B^{12}) Z_t\text{, where }Z_t ~ N(0, 52886).$$
+
+\section{Forecasting}
+Since the goal of our project is to predict the future index values of Credit Suisse Liquid Alternative Beta Index, we will now forecast future 12 months returns by minimizing the mean absolute forecast errors, from January 2019 to December 2019 at monthly intervals.
+
+```{r, fig.align = 'center', fig.width=8, fig.height= 4}
+pred.try=predict(fit1,n.ahead = 12)
+
+U.try<-(lambda*(pred.try$pred+1.96*pred.try$se)+1)^(1/lambda)
+L.try<-(lambda*(pred.try$pred-1.96*pred.try$se)+1)^(1/lambda)
+plot(index[1:nlength],xlim=c(0,300),type="l",ylab="index values",
+     main = expression("Forecasting based on data for the next twelve points"),ylim=c(400,1500))
+newpred=(lambda*(pred.try$pred)+1)^(1/lambda)
+lines((length(index[1:nlength])+1):(length(index[1:nlength])+12),newpred, col = "green")
+lines((length(index[1:nlength])+1):(length(index[1:nlength])+12),U.try,col = "blue",lty = 2)
+lines((length(index[1:nlength])+1):(length(index[1:nlength])+12),L.try,col = "blue",lty = 2)
+points((length(index[1:nlength])+1):(length(index[1:nlength])+12),newpred, col = "red", pch = "*")
+legend("topleft", c("Prediction Bounds", "Prediction"),
+       col = c("blue", "green"), lty= c(2,1), cex = 0.7)
+title(sub = '(Figure 2.1) Long Liquid Alternative Beta Index from Jan. 1998 to Dec. 2019', font.sub = 2, cex.sub = 0.7)
+```
+
+Figure 7.1 shows the twelve forecasted index values with a 95% confidence interval. 
+
+We could now construct a plot to compare the real data with our predictions. In Figure 7.2 below, we could check to see if the pattern of our predicted values is similar to the original data within our upper and lower confidence interval boundaries.
+
+```{r, fig.align = 'center', fig.width=8, fig.height= 4}
+ts.plot(index, xlim = c(length(index)-12,length(index)),
+        main = expression("Comparison between Observed Values and Forecasted Values"),
+        ylab = 'per month',ylim=c(1200,1500))
+newpred=(lambda*(pred.try$pred)+1)^(1/lambda)
+lines((length(index[1:nlength])+1):(length(index[1:nlength])+12),newpred, col = "green")
+lines((length(index[1:nlength])+1):(length(index[1:nlength])+12),U.try,col = "blue",lty = "dashed")
+lines((length(index[1:nlength])+1):(length(index[1:nlength])+12),L.try,col = "blue",lty = "dashed")
+legend("topright", c("Prediction Bounds", "Prediction", "True Values"),
+col = c("blue", "green", "black"), lty= c(2, 1, 1), cex = 0.7)
+title(sub = '(Figure 7.2) A Comparison of True Values and Forecasted Values', font.sub = 2, cex.sub = 0.7)
+```
+\section{GARCH Model}
+```{r quesion1}
+library("astsa")
+library(fGarch)
+index1=ts(data[,2],start=1998,f=12)
+index=ts(data[,2])
+#par(mfrow = c(3,1))
+plot(index1)
+plot(diff(log(index1)))
+
+indexr = diff(log(index1))
+acf2(indexr)    # exhibits some autocorrelation (not shown)
+
+# GARCH fit
+summary(indexr.g <- garchFit(~arma(1,1)+garch(1,1), data=indexr, cond.dist='std'))
+```
+
+
+\section{Spectral Analysis}
+
+An important factor many investors would consider before investing in an asset is on the cyclicality of the asset. Cyclical assets are known to follow systematic changes according to the overall economy. These type of assets are ones where investors would avoid during a recession and invest in during economic strength. Therefore, before we could consider whether Credit Suisse Liquid Alternative Beta Index (LAB) as a potential investment, we must analyze its cyclical behavior by performing a spectral analysis. 
+
+First, we will find the predominant frequency by plotting a periodogram and compute the 95% Confidence Intervals for our identified periods. 
+
+```{r, echo = FALSE, results = FALSE, fig.align = 'center'}
+sp <- spec.pgram(data, taper = 0, kernel('daniell', 4), log = 'no')
+head(n=2, order(decreasing = TRUE, sp$spec)) # predominant frequencies
+abline(v = sp$freq[c(24,23)], lty=2)
+sortedSpecs <- sort(sp$spec, decreasing = TRUE)[c(1,2,4)]
+sortedSpecs <- sort(sp$spec, decreasing = TRUE)
+CI <- function(peakSpec) {
+  u <- qchisq(0.025, sp$df)
+  l <- qchisq(0.975, sp$df)
+  c((2*peakSpec)/l, (2*peakSpec)/u)
+}
+
+CI(sortedSpecs[1])
+CI(sortedSpecs[2])
+CI(sortedSpecs[3])
+abline(v=sortedSpecs[1], lty=2, col = 'green')
+abline(v=CI(sortedSpecs[2]), lty=2, col='blue')
+
+p1 <- sp$freq[sp$spec == sortedSpecs[1]]
+p2 <- sp$freq[sp$spec == sortedSpecs[2]]
+p3 <- sp$freq[sp$spec == sortedSpecs[3]]
+
+# cat('Cycles are occuring at', 1/p1, 1/p2, 1/p3, 'years.')
+
+data.per = mvspec(data, log="no")
+m = data.per$freq[which.max(data.per$spec)] # Major peak 
+abline(v=m, lty=2, col = 'green')
+```
+
+From raw periodogram of LAB above, the green dashed line indicates the first dominant period which is $\frac{1}{0.08518519} \approx 11.74$. Therefore we could conclude that the major peak occurs approximately at a 12 time periods which means one year for our data and our 95% confidence interval for the spectrum $f_s(1/11)$ is [3731.079, 14522.070]. Given that the dominant cyclical behavior occurs yearly, we could conclude that the Liquid Alternative Beta Index is cyclical to an extent depending on which scale one is comparing to. For instance, long-term investors may not be as inclined to invest in this index since it is suspectible to annual economic changes. 
+
+\section{Concluding Remarks}
+
+Price analysis and prediction are very important in finance area. For this project, we were interested in exploring and forecasting the Long Alternative Beta Index values from Credit Suisse. By the help of time series analysis, we conduct time domain analysis and frequency analysis. Using SARIMA, we identified the model parameters, select and estimated the model, and predicted future price with the estimated model. Our analyses exhibits a good result. We also conducted an initial GARCH model analysis and a spectral analysis to add another dimension to the time series analysis. We identified the dominant frequency in the time series, which is quite important for financial analysis. The analysis results of the index show that time series is powerful especially for financial data analysis. Our findings in this project may provide some insights for hedge fund price prediction.
+
+\newpage
+
+\section{Contribution Statement}
+
+For this project, Emily and Vanessa worked on the compiling and formatting of the project, introduction, data description, and spectral analysis. Xingyu and Enbo both worked on the abstract, time domain analyses, other analyses, and conclusion. Additonally, all members of the group proofread the final report, cross-checked, and added additional analyses to each other work.
+
+-signed by Emily Lu, Enbo Zhou, Vanessa Ho, and Xingyu Chen
+\newpage
+
+\addcontentsline{toc}{section}{Appendix: Additional R Code}
+\section*{Appendix: Additional R Code}
+\thispagestyle{empty}
+
+```{r, echo=TRUE, message=FALSE, results='hide', plot = FALSE, warnings = FALSE, error=FALSE}
+# data = read.csv("C:/Users/11351/Desktop/index.csv",header=T)
+# head(data,3)
+# 
+# # Data Exploratory Analysis
+# 
+# index1=ts(data[,2],start=1998,f=12)
+# index=ts(data[,2])
+# ts.plot(index1,main = "Raw data",ylab="Liquid Alternative Beta Index")
+# 
+# acf(index,lag.max=100,na.action = na.pass,main="")
+# pacf(index,lag.max=100,na.action=na.pass,main="")
+# title(main="PACF for raw data", line=-1,outer=TRUE)
+# 
+# # Seasonal Plot and Decomposition plot
+# library(forecast)
+# seasonplot(index1,12,col=rainbow(3),year.labels=FALSE,main="Seasonal Plot")
+# decom <- decompose(ts(data[,2],start=1998,f=12),type=c("additive"))
+# plot(decom, xlab="Time in years")
+# 
+# nlength=length(index)-12
+# Transindex=index[1:nlength]
+# Transindex1=index1[1:nlength]
+# acf(Transindex,main="ACF for Training data",na.action = na.pass)
+# pacf(Transindex,na.action=na.pass,main="")
+# title(main="PACF for Training data", line=-1,outer=TRUE)
+
+# 
+# # Data Transformation
+# # First Step:Stabilize Variance
+# 
+# library(MASS)
+# length(Transindex)
+# bxTransform <- boxcox(Transindex~as.numeric(1:length(Transindex)))
+# lambda = bxTransform$x[which(bxTransform$y == max(bxTransform$y))]
+# lambda
+# 
+# par(mfrow=c(1,2))
+# trans_index=(Transindex^lambda-1)/lambda
+# trans_index1=(Transindex1^lambda-1)/lambda
+# ts.plot(trans_index,ylab="transformed data")
+# acf(trans_index,lag.max=100,na.action = na.pass,main='')
+# 
+# pacf(trans_index,lag.max=100,na.action=na.pass)
+# title(main="PACF for Transformed data", line=-1,outer=TRUE)
+# 
+# # remove Seasonality
+# diffindex = diff(trans_index, 12)
+# ts.plot(diffindex,main = "De-seasonalized Time Series",ylab=expression(nabla^{12}~W[t]))
+# abline(lm(diffindex~as.numeric (1:length(diffindex))))
+# 
+# acf(diffindex,lag.max=100,main="ACF for De-seasonalized data",na.action = na.pass)
+# pacf(diffindex,lag.max=100,na.action=na.pass,main="")
+# title(main="PACF for De-seasonalized data", line=-1,outer=TRUE)
+# 
+# # remove Seasonality and Trend
+# diffindex_s<-diff(diffindex, lag=1)
+# ts.plot(diffindex_s,main = "De-seasonalized/De-trended Time Series",
+#         ylab = expression(nabla~nabla^{12}~W[t]))
+# abline(lm(diffindex_s~as.numeric(1:length(diffindex_s))))
+# acf(diffindex_s,lag.max=100,main="ACF for De-seasonalized/De-trended data",na.action = na.pass)
+# pacf(diffindex_s,lag.max=100,na.action=na.pass,main="")
+# title(main="PACF for De-seasonalized/De-trended data", line=-1,outer=TRUE)
+# 
+# par(mfrow=c(1,2))
+# diffindex = diff(trans_index, 12)
+# ts.plot(diffindex,main = "De-seasonalized Time Series",ylab=expression(nabla^{12}~W[t]))
+# abline(lm(diffindex~as.numeric (1:length(diffindex))))
+# diffindex_s<-diff(diffindex, lag=1)
+# ts.plot(diffindex_s,main = "De-seasonalized/De-trended Time Series",
+#         ylab = expression(nabla~nabla^{12}~W[t]))
+# abline(lm(diffindex_s~as.numeric(1:length(diffindex_s))))
+# 
+# diffindex13<-diff(diffindex_s, lag=1)
+# tsdisplay(diffindex13,lag.max=100)
+# diffindex14<-diff(diffindex13, lag=1)
+# tsdisplay(diffindex14,lag.max=100)
+# 
+# # Check for overdifferencing or not
+# var(diffindex_s)
+# var(diffindex13)
+# var(diffindex14)
+# 
+# # Check unit root using ADF test
+# library(tseries)
+# adf.test(diffindex_s)
+# 
+# 
+# # Model Identification
+# 
+# # Find P, Q, P=3, Q=1
+# par(mfrow=c(1,2))
+# acf(diffindex_s,lag.max=60,na.action = na.pass,main="")
+# pacf(diffindex_s,lag.max=60,na.action=na.pass,main="")
+# 
+# # find p, q by looking at ACF and PACF plots of the zoomed plot p=0, q=0
+# par(mfrow=c(1,2))
+# acf(diffindex_s,lag.max=12,main="",na.action = na.pass)
+# pacf(diffindex_s,lag.max=12,na.action=na.pass,main="")
+# 
+# library(qpcR)
+# AICc1<-matrix(NA,nr = 4,nc =2)
+# for (p in 0:3){
+#   for (q in 0:1){
+#     AICc1[p+1,q+1]<-AICc(arima(trans_index,order=c(0,1,0),
+#                                seasonal= list(order=c(p,1,q),period=12),method = "ML"))
+#     }
+# }
+# 
+# AICc1<-as.data.frame(AICc1)
+# rownames(AICc1)<-c("P=0","P=1","P=2","P=3")
+# colnames(AICc1)<-c("Q=0","Q=1")
+# AICc1
+# (AICc1==min(AICc1))
+# 
+# BICc1<-matrix(NA,nr = 4,nc =2)
+# for (p in 0:3){
+#   for (q in 0:1){
+#     BICc1[p+1,q+1]<-BIC(arima(trans_index,order=c(0,1,0),
+#                                seasonal= list(order=c(p,1,q),period=12),method = "ML"))
+#     }
+# }
+# 
+# BICc1<-as.data.frame(AICc1)
+# rownames(BICc1)<-c("P=0","P=1","P=2","P=3")
+# colnames(BICc1)<-c("Q=0","Q=1")
+# BICc1
+# (BICc1==min(BICc1))
+# 
+# # Fit and Estimation based on MLE method
+# # MODEL 4 : p =0 and q = 0, P=3, Q=1
+# fit4 <- arima(trans_index,order=c(0,1,0),
+#               seasonal= list(order=c(3,1,1),period=12),method="ML" )
+# summary(fit4)
+# 
+# # Fit and Estimation based on MLE method
+# # MODEL 2 : p =0 and q = 0, P=1, Q=1
+# fit2 <- arima(trans_index,order=c(0,1,0),
+#               seasonal= list(order=c(1,1,1),period=12),method="ML" )
+# summary(fit2)
+# 
+# # Fit and Estimation based on MLE method
+# # MODEL 3 : p =0 and q = 0, P=2, Q=1
+# fit3 <- arima(trans_index,order=c(0,1,0),
+#               seasonal= list(order=c(2,1,1),period=12),method="ML" )
+# summary(fit3)
+# 
+# # Fit and Estimation based on MLE method
+# # MODEL 1 : p =0 and q = 0, P=0, Q=1
+# fit1 <- arima(trans_index,order=c(0,1,0),
+#               seasonal= list(order=c(0,1,1),period=12),method="ML" )
+# summary(fit1)
+# 
+# # Check the normality of the residuals for both models
+# par(mfrow=c(2,2))
+# qqnorm(residuals(fit1),main="Normal QQ plot for fit1")
+# qqline(residuals(fit1),col="red")
+# qqnorm(residuals(fit2),main="Normal QQ plot for fit2")
+# qqline(residuals(fit2),col="red")
+# qqnorm(residuals(fit3),main="Normal QQ plot for fit3")
+# qqline(residuals(fit3),col="red")
+# qqnorm(residuals(fit4),main="Normal QQ plot for fit4")
+# qqline(residuals(fit4),col="red")
+# 
+# hist(residuals(fit1),col="blue")
+# hist(residuals(fit2),col="blue")
+# hist(residuals(fit3),col="blue")
+# hist(residuals(fit4),col="blue")
+# 
+# shapiro.test(residuals(fit1))
+# shapiro.test(residuals(fit2))
+# shapiro.test(residuals(fit3))
+# shapiro.test(residuals(fit4))
+# 
+# # Test for independence of residuals
+# Box.test(residuals(fit1), type="Ljung")
+# Box.test(residuals(fit2), type="Ljung")
+# Box.test(residuals(fit3), type="Ljung")
+# Box.test(residuals(fit4), type="Ljung")
+# Box.test(residuals(fit1), type="Box-Pierce")
+# Box.test(residuals(fit2), type="Box-Pierce")
+# Box.test(residuals(fit3), type="Box-Pierce")
+# Box.test(residuals(fit4), type="Box-Pierce")
+# 
+# # Heteroscedasticity Checking
+# par(mfrow=c(4,2))
+# library(astsa)
+# acf2(residuals(fit1)^2,main = "ACF and PACF of fit1^2")
+# acf2(residuals(fit2)^2,main = "ACF and PACF of fit2^2")
+# acf2(residuals(fit3)^2,main = "ACF and PACF of fit3^2")
+# acf2(residuals(fit4)^2,main = "ACF and PACF of fit4^2")
+# 
+# pred.try=predict(fit1,n.ahead = 12)
+# 
+# U.try<-(lambda*(pred.try$pred+1.96*pred.try$se)+1)^(1/lambda)
+# L.try<-(lambda*(pred.try$pred-1.96*pred.try$se)+1)^(1/lambda)
+# plot(index[1:nlength],xlim=c(0,300),type="l",ylab="index values",
+#      main = expression("Forcasting based on data for the next twelve points"),ylim=c(400,1500))
+# newpred=(lambda*(pred.try$pred)+1)^(1/lambda)
+# lines((length(index[1:nlength])+1):(length(index[1:nlength])+12),newpred, col = "green")
+# lines((length(index[1:nlength])+1):(length(index[1:nlength])+12),U.try,col = "blue",lty = 2)
+# lines((length(index[1:nlength])+1):(length(index[1:nlength])+12),L.try,col = "blue",lty = 2)
+# points((length(index[1:nlength])+1):(length(index[1:nlength])+12),newpred, col = "red", pch = "*")
+# legend("topleft", c("Prediction Bounds", "Prediction"),
+#        col = c("blue", "green"), lty= c(2,1), cex = 0.7)
+# 
+# ts.plot(index, xlim = c(length(index)-12,length(index)),
+#         main = expression("Comparison between Obsevered Values and Forcasted Values"),
+#         ylab = 'per month',ylim=c(1200,1500))
+# newpred=(lambda*(pred.try$pred)+1)^(1/lambda)
+# lines((length(index[1:nlength])+1):(length(index[1:nlength])+12),newpred, col = "green")
+# lines((length(index[1:nlength])+1):(length(index[1:nlength])+12),U.try,col = "blue",lty = "dashed")
+# lines((length(index[1:nlength])+1):(length(index[1:nlength])+12),L.try,col = "blue",lty = "dashed")
+# legend("topright", c("Prediction Bounds", "Prediction", "True Values"),
+# col = c("blue", "green", "black"), lty= c(2, 1, 1), cex = 0.7)
+
+# library("astsa")
+# library(fGarch)
+# index1=ts(data[,2],start=1998,f=12)
+# index=ts(data[,2])
+# #par(mfrow = c(3,1))
+# plot(index1)
+# plot(diff(log(index1)))
+# 
+# indexr = diff(log(index1))
+# acf2(indexr)    # exhibits some autocorrelation (not shown)
+# 
+# # GARCH fit
+# summary(indexr.g <- garchFit(~arma(1,1)+garch(1,1), data=indexr, cond.dist='std'))
+
+# Spectral Analysis 
+# par(mfrow = c(2,1))
+# sp <- spec.pgram(data, taper = 0, kernel('daniell', 4), log = 'no')
+# head(n=2, order(decreasing = TRUE, sp$spec)) # predominant frequencies
+# abline(v = sp$freq[c(24,23)], lty=2)
+# sortedSpecs <- sort(sp$spec, decreasing = TRUE)[c(1,2,4)]
+# sortedSpecs <- sort(sp$spec, decreasing = TRUE)
+# CI <- function(peakSpec) {
+#   u <- qchisq(0.025, sp$df)
+#   l <- qchisq(0.975, sp$df)
+#   c((2*peakSpec)/l, (2*peakSpec)/u)
+# }
+# 
+# CI(sortedSpecs[1])
+# CI(sortedSpecs[2])
+# CI(sortedSpecs[3])
+# abline(v=sortedSpecs[1], lty=2, col = 'green')
+# abline(v=CI(sortedSpecs[2]), lty=2, col='blue')
+# 
+# p1 <- sp$freq[sp$spec == sortedSpecs[1]]
+# p2 <- sp$freq[sp$spec == sortedSpecs[2]]
+# p3 <- sp$freq[sp$spec == sortedSpecs[3]]
+# 
+# # cat('Cycles are occuring at', 1/p1, 1/p2, 1/p3, 'years.')
+# 
+# data.per = mvspec(data, log="no")
+# m = data.per$freq[which.max(data.per$spec)] # Major peak 
+# abline(v=m, lty=2, col = 'green')
+```
+
+\newpage
+\addcontentsline{toc}{section}{Reference}
+\bibliographystyle{acm}
+\bibliography{ref}
+
+Time Series Analysis and Its Applications with R Examples by R. H. Shumway and D. S. Stoffer
+
+Credit Suisse Liquid Alternative Beta Index Data from https://lab.credit-suisse.com/#/en/login 
+
+\newpage
+
+
